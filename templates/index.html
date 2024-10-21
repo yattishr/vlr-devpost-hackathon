@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valorant Players and Teams Agent</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            margin: 0;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background-color: #3f51b5;
+            color: #ffffff;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar h2 {
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+
+        .sidebar button {
+            background-color: #5c6bc0;
+            color: white;
+            border: none;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .sidebar button:hover {
+            background-color: #3949ab;
+        }
+
+        /* Main content */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+        }
+
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            background-color: #fafafa;
+            flex-grow: 1;
+        }
+
+        .chat-box {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 20px;
+        }
+
+        .chat-box input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .chat-box button {
+            padding: 10px;
+            background-color: #3f51b5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .chat-box button:hover {
+            background-color: #303f9f;
+        }
+
+        .chat-output {
+            overflow-y: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-message {
+            margin-bottom: 15px;
+            max-width: 70%;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .chat-message.user {
+            align-self: flex-end;
+            background-color: #e3f2fd;
+            color: #3f51b5;
+        }
+
+        .chat-message.ai {
+            align-self: flex-start;
+            background-color: #f5f5f5;
+            color: #444;
+        }
+
+        .pin-button {
+            cursor: pointer;
+            float: right;
+            margin-left: 10px;
+        }
+
+        #pinned-messages {
+            padding: 20px;
+            background-color: #fff;
+            border-left: 1px solid #e0e0e0;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .loading-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar for navigation -->
+    <div class="sidebar">
+        <h2>Valorant Agent Chat</h2>
+        <button id="theme-toggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+        <button onclick="clearChat()">Clear Chat</button>
+        <button onclick="togglePinnedMessages()">Toggle Pinned Messages</button>
+    </div>
+
+    <!-- Main content area -->
+    <div class="main-content">
+        <!-- Chat area for user interaction -->
+        <div class="chat-area">
+            <div class="chat-output" id="chat-container"></div>
+            <div class="chat-box">
+                <input type="text" id="user-input" placeholder="Ask a question..." />
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <!-- Pinned messages area (initially hidden) -->
+        <div id="pinned-messages" style="display: none;"></div>
+    </div>
+
+    <script>
+        let isDarkMode = false;
+        let messageId = 0;
+
+        function toggleDarkMode() {
+            isDarkMode = !isDarkMode;
+            document.body.classList.toggle('dark-mode');
+            // Add more specific dark mode styles as needed
+        }
+
+        let loadingIndicator = null;
+
+        function sendMessage() {            
+            var userInput = $('#user-input').val();
+            if (userInput.trim() === '') return;
+
+            addMessage('You', userInput, 'user');
+            $('#user-input').val('');
+
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+
+            // Add loading indicator
+            loadingIndicator = $('<div class="loading-indicator"></div>');
+            $('#chat-container').append(loadingIndicator);
+            $('#chat-container').scrollTop($('#chat-container')[0].scrollHeight);
+
+            $.ajax({
+                url: '/chat',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({message: userInput}),
+                success: function(response) {
+                // Remove loading indicator
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                    loadingIndicator = null;
+                }
+                    addMessage('Agent', response.response, 'ai');
+                },
+                error: function() {
+                // Remove loading indicator and show error message
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                    loadingIndicator = null;
+                }
+                addMessage('System', 'Sorry, the agent encountered an error occurred while processing your request.', 'ai');
+                }
+            });
+        }
+
+        function addMessage(sender, content, className) {
+            messageId++;
+            const messageHtml = `
+                <div class="chat-message ${className}" id="message-${messageId}">
+                    <strong>${sender}:</strong> ${content}
+                    <span class="pin-button" onclick="togglePin(${messageId})">📌</span>
+                </div>
+            `;
+            $('#chat-container').append(messageHtml);
+            $('#chat-container').scrollTop($('#chat-container')[0].scrollHeight);
+        }
+
+        function togglePin(id) {
+            const message = $(`#message-${id}`);
+            const isPinned = message.hasClass('pinned');
+            if (isPinned) {
+                message.removeClass('pinned');
+                $(`#pinned-${id}`).remove();
+            } else {
+                message.addClass('pinned');
+                const pinnedHtml = `
+                    <div class="chat-message" id="pinned-${id}">
+                        ${message.html()}
+                    </div>
+                `;
+                $('#pinned-messages').append(pinnedHtml);
+            }
+        }
+
+        function clearChat() {
+            $('#chat-container').empty();
+            $('#pinned-messages').empty();
+        }
+
+        function togglePinnedMessages() {
+            $('#pinned-messages').toggle();
+        }
+
+        $('#user-input').keypress(function(e) {
+            if (e.which == 13) {
+                sendMessage();
+                return false;
+            }
+        });
+
+        $('#theme-toggle').click(toggleDarkMode);
+    </script>
+</body>
+</html>
